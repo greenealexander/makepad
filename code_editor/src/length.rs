@@ -2,32 +2,29 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Length {
-    pub line_count: usize,
-    pub byte_count: usize,
+    pub lines: usize,
+    pub bytes: usize,
 }
 
 impl Length {
-    pub fn new(line_count: usize, byte_count: usize) -> Self {
-        Self {
-            line_count,
-            byte_count,
-        }
+    pub fn new(lines: usize, bytes: usize) -> Self {
+        Self { lines, bytes }
     }
 }
 
 impl Add for Length {
-    type Output = Length;
+    type Output = Self;
 
     fn add(self, other: Self) -> Self::Output {
-        if other.line_count == 0 {
+        if other.lines == 0 {
             Self {
-                line_count: self.line_count,
-                byte_count: self.byte_count + other.byte_count,
+                lines: self.lines,
+                bytes: self.bytes + other.bytes,
             }
         } else {
             Self {
-                line_count: self.line_count + other.line_count,
-                byte_count: other.byte_count,
+                lines: self.lines + other.lines,
+                bytes: other.bytes,
             }
         }
     }
@@ -40,18 +37,18 @@ impl AddAssign for Length {
 }
 
 impl Sub for Length {
-    type Output = Length;
+    type Output = Self;
 
     fn sub(self, other: Self) -> Self::Output {
-        if self.line_count == other.line_count {
+        if self.lines == other.lines {
             Self {
-                line_count: 0,
-                byte_count: self.byte_count - other.byte_count,
+                lines: 0,
+                bytes: self.bytes - other.bytes,
             }
         } else {
             Self {
-                line_count: self.line_count - other.line_count,
-                byte_count: self.byte_count,
+                lines: self.lines - other.lines,
+                bytes: self.bytes,
             }
         }
     }

@@ -1,7 +1,4 @@
-use {
-    crate::{Diff, Length, Position, Range},
-    std::{borrow::Cow, ops::AddAssign},
-};
+use {crate::{Diff, Point, Length}, std::ops::AddAssign};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Text {
@@ -18,104 +15,128 @@ impl Text {
     }
 
     pub fn length(&self) -> Length {
-        Length {
-            line_count: self.lines.len() - 1,
-            byte_count: self.lines.last().unwrap().len(),
-        }
+        Length::new(self.lines.len() - 1, self.lines.last().unwrap().len())
     }
 
     pub fn as_lines(&self) -> &[String] {
         &self.lines
     }
 
-    pub fn slice(&self, range: Range) -> Self {
-        let mut lines = Vec::new();
-        if range.start().line == range.end().line {
-            lines.push(
-                self.lines[range.start().line][range.start().byte..range.end().byte].to_string(),
-            );
-        } else {
-            lines.reserve(range.end().line - range.start().line + 1);
-            lines.push(self.lines[range.start().line][range.start().byte..].to_string());
-            lines.extend(
-                self.lines[range.start().line + 1..range.end().line]
-                    .iter()
-                    .cloned(),
-            );
-            lines.push(self.lines[range.end().line][..range.end().byte].to_string());
+    pub fn slice(&self, range: Range) -> Text {
+        Text {
+            lines: if range.start.line == range.end.line {
+                vec![
+                    self.lines[range.start.line][range.start.column..range.end.column]
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                ]
+            } else {
+                let mut lines = Vec::with_capacity(range.end.line - range.start.line + 1);
+                lines.push(
+                    self.lines[range.start.line][range.start.column..]
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                );
+                lines.extend(
+                    self.lines[range.start.line + 1..range.end.line]
+                        .iter()
+                        .cloned(),
+                );
+                lines.push(
+                    self.lines[range.end.line][..range.end.column]
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                );
+                lines
+            },
         }
-        Text { lines }
     }
 
-    pub fn take(&mut self, len: Length) -> Self {
+
+    pub fn take(&mut self, length: Length) -> Self {
         let mut lines = self
             .lines
-            .drain(..len.line_count as usize)
+            .drain(..length.lines as usize)
             .collect::<Vec<_>>();
-        lines.push(self.lines.first().unwrap()[..len.byte_count].to_string());
+        lines.push(self.lines.first().unwrap()[..length.bytes].to_string());
         self.lines
             .first_mut()
             .unwrap()
-            .replace_range(..len.byte_count, "");
+            .replace_range(..length.bytes, "");
         Text { lines }
     }
 
-    pub fn skip(&mut self, len: Length) {
-        self.lines.drain(..len.line_count);
+    pub fn skip(&mut self, length: Length) {
+        self.lines.drain(..length.lines);
         self.lines
             .first_mut()
             .unwrap()
-            .replace_range(..len.byte_count, "");
+            .replace_range(..length.bytes, "");
     }
 
-    pub fn insert(&mut self, position: Position, mut text: Self) {
-        if text.length().line_count == 0 {
-            self.lines[position.line]
-                .replace_range(position.byte..position.byte, text.lines.first().unwrap());
+    pub fn insert(&mut self, point: Point, mut text: Self) {
+        if text.length().lines == 0 {
+            self.lines[point.line]
+                .replace_range(point.byte..point.byte, text.lines.first().unwrap());
         } else {
             text.lines
                 .first_mut()
                 .unwrap()
-                .replace_range(..0, &self.lines[position.line][..position.byte]);
+                .replace_range(..0, &self.lines[point.line][..point.byte]);
             text.lines
                 .last_mut()
                 .unwrap()
-                .push_str(&self.lines[position.line][position.byte..]);
+                .push_str(&self.lines[point.line][point.byte..]);
             self.lines
-                .splice(position.line..position.line + 1, text.lines);
+                .splice(point.line..point.line + 1, text.lines);
         }
     }
 
-    pub fn delete(&mut self, position: Position, length: Length) {
+    pub fn delete(&mut self, start: Point, length: Length) {
         use std::iter;
 
-        if length.line_count == 0 {
-            self.lines[position.line]
-                .replace_range(position.byte..position.byte + length.byte_count, "");
+        if length.lines == 0 {
+            self.lines[start.line]
+                .replace_range(start.byte..start.byte + length.bytes, "");
         } else {
-            let mut line = self.lines[position.line][..position.byte].to_string();
-            line.push_str(&self.lines[position.line + length.line_count][length.byte_count..]);
+            let mut line = self.lines[start.line][..start.byte].to_string();
+            line.push_str(&self.lines[start.line + length.lines][length.bytes..]);
             self.lines.splice(
-                position.line..position.line + length.line_count + 1,
+                start.line..start.line + length.lines + 1,
                 iter::once(line),
             );
         }
     }
 
     pub fn apply_diff(&mut self, diff: Diff) {
-        use super::diff::Operation;
+        use crate::diff::Operation;
 
-        let mut position = Position::default();
+        let mut point = Point::default();
         for operation in diff {
             match operation {
-                Operation::Delete(length) => self.delete(position, length),
-                Operation::Retain(length) => position += length,
+                Operation::Delete(length) => self.delete(point, length),
+                Operation::Retain(length) => point += length,
                 Operation::Insert(text) => {
                     let length = text.length();
-                    self.insert(position, text);
-                    position += length;
+                    self.insert(point, text);
+                    point += length;
                 }
             }
+        }
+    }
+
+    pub fn into_lines(self) -> Vec<String> {
+        self.lines
+    }
+}
+
+impl Default for Text {
+    fn default() -> Self {
+        Self {
+            lines: vec![String::new()],
         }
     }
 }
@@ -132,48 +153,12 @@ impl AddAssign for Text {
     }
 }
 
-impl Default for Text {
-    fn default() -> Self {
-        Self {
-            lines: vec![String::new()],
-        }
-    }
-}
-
-impl From<char> for Text {
-    fn from(char: char) -> Self {
-        Self {
-            lines: match char {
-                '\n' | '\r' => vec![String::new(), String::new()],
-                _ => vec![char.into()],
-            },
-        }
-    }
-}
-
 impl From<&str> for Text {
     fn from(string: &str) -> Self {
-        let mut lines: Vec<_> = string.split('\n').map(|line| line.to_string()).collect();
+        let mut lines: Vec<_> = string.lines().map(|string| string.to_owned()).collect();
         if lines.is_empty() {
             lines.push(String::new());
         }
         Self { lines }
-    }
-}
-impl From<&String> for Text {
-    fn from(string: &String) -> Self {
-        string.as_str().into()
-    }
-}
-
-impl From<String> for Text {
-    fn from(string: String) -> Self {
-        string.as_str().into()
-    }
-}
-
-impl From<Cow<'_, str>> for Text {
-    fn from(string: Cow<'_, str>) -> Self {
-        string.as_ref().into()
     }
 }

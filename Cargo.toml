@@ -24,6 +24,7 @@ workspace.members = [
     "examples/web_cam", 
     "examples/ironfish",
     "examples/simple",
+    "examples/my_test",
     "examples/text_flow",
  #   "experiments/bigfish",
     "experiments/teamtalk",
